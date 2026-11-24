@@ -1,7 +1,7 @@
 import { sdb } from '@/db/simple-db'
 import { getDateRange, type DatePreset } from '@/lib/date-ranges'
 import { roundKg, roundMoney } from '@/lib/utils'
-import { getFarmerTotals, listFarmers } from './farmers'
+import { getAllFarmerTotalsMap, listFarmers } from './farmers'
 import { listBills } from './billing'
 
 /** Convert ISO range to YYYY-MM-DD in local/Kolkata-ish for entryDate compare */
@@ -40,17 +40,19 @@ export async function getOverview(preset: DatePreset, customFrom?: string, custo
     paidOnEntries + paymentsInPeriod.reduce((s, p) => s + p.amount, 0),
   )
 
+  const totalsMap = await getAllFarmerTotalsMap()
   let outstanding = 0
   const pending: { farmerId: string; name: string; code: string; balance: number }[] = []
   for (const f of farmers) {
-    const t = await getFarmerTotals(f.id)
-    if (t.outstanding > 0.009) {
-      outstanding += t.outstanding
+    const t = totalsMap.get(f.id)
+    const bal = t?.outstanding ?? 0
+    if (bal > 0.009) {
+      outstanding += bal
       pending.push({
         farmerId: f.id,
         name: f.fullName,
         code: f.farmerCode,
-        balance: t.outstanding,
+        balance: bal,
       })
     }
   }

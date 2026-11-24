@@ -4,8 +4,6 @@ import type { Bill, BillPeriodType, DailyEntry } from '@/types/simple'
 import { listEntriesInRange } from './entries'
 import { getFarmerTotals } from './farmers'
 import { nextSimpleCode } from './ids'
-import { listPaymentsForFarmer } from './payments'
-
 function endOfMonth(ym: string) {
   const [y, m] = ym.split('-').map(Number)
   const last = new Date(y, m, 0).getDate()
@@ -63,7 +61,10 @@ export async function previewBill(params: {
     params.customFrom,
     params.customTo,
   )
-  const entries = await listEntriesInRange(params.farmerId, from, to)
+  const [entries, totals] = await Promise.all([
+    listEntriesInRange(params.farmerId, from, to),
+    getFarmerTotals(params.farmerId),
+  ])
   const unbilled = entries.filter((e) => !e.billedBillId)
   const billedElsewhere = entries.filter((e) => !!e.billedBillId)
 
@@ -73,15 +74,12 @@ export async function previewBill(params: {
   const totalCharges = roundMoney(unbilled.reduce((s, e) => s + e.labourCharge, 0))
   const paidOnEntries = roundMoney(unbilled.reduce((s, e) => s + e.amountPaid, 0))
 
-  const totals = await getFarmerTotals(params.farmerId)
   // Previous balance = outstanding before this period's unbilled charges
-  // Approximate: overall outstanding - (unbilled charges - paid on those entries)
   const periodNet = roundMoney(totalCharges - paidOnEntries)
   const previousBalance = roundMoney(totals.outstanding - periodNet)
 
-  const payments = await listPaymentsForFarmer(params.farmerId)
   const paymentsInPeriod = roundMoney(
-    payments
+    totals.payments
       .filter((p) => p.paymentDate >= from && p.paymentDate <= to && !p.linkedBillId)
       .reduce((s, p) => s + p.amount, 0),
   )

@@ -38,7 +38,7 @@ export function formatMoney(value: number | undefined | null, symbol = '₹'): s
 }
 
 export function formatDate(iso: string, withTime = false): string {
-  const d = new Date(iso)
+  const d = new Date(iso.includes('T') ? iso : `${iso}T12:00:00`)
   if (Number.isNaN(d.getTime())) return '—'
   const date = d.toLocaleDateString('en-IN', {
     day: '2-digit',
@@ -54,6 +54,34 @@ export function formatDate(iso: string, withTime = false): string {
     timeZone: 'Asia/Kolkata',
   })
   return `${date}, ${time}`
+}
+
+/** Format YYYY-MM-DD for bills/reports without timezone drift. */
+export function formatBusinessDate(ymd: string, withWeekday = false): string {
+  const d = new Date(`${ymd.slice(0, 10)}T12:00:00`)
+  if (Number.isNaN(d.getTime())) return ymd
+  return d.toLocaleDateString('en-IN', {
+    weekday: withWeekday ? 'short' : undefined,
+    day: '2-digit',
+    month: 'short',
+    year: 'numeric',
+  })
+}
+
+/** Inclusive list of YYYY-MM-DD days between from and to. */
+export function eachDayYmd(from: string, to: string): string[] {
+  const days: string[] = []
+  const cur = new Date(`${from.slice(0, 10)}T12:00:00`)
+  const end = new Date(`${to.slice(0, 10)}T12:00:00`)
+  if (Number.isNaN(cur.getTime()) || Number.isNaN(end.getTime())) return days
+  while (cur <= end) {
+    const y = cur.getFullYear()
+    const m = String(cur.getMonth() + 1).padStart(2, '0')
+    const day = String(cur.getDate()).padStart(2, '0')
+    days.push(`${y}-${m}-${day}`)
+    cur.setDate(cur.getDate() + 1)
+  }
+  return days
 }
 
 export function padCode(n: number, width = 4): string {

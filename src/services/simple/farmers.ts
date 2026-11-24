@@ -95,9 +95,21 @@ export async function updateFarmer(id: string, data: FarmerFormData): Promise<Si
   return updated
 }
 
-export async function getFarmerTotals(farmerId: string) {
-  const entries = await listEntriesForFarmer(farmerId)
-  const payments = await listPaymentsForFarmer(farmerId)
+export type FarmerTotals = {
+  totalGreenKg: number
+  totalDryKg: number
+  totalLossKg: number
+  totalCharges: number
+  totalPaid: number
+  outstanding: number
+  entries: Awaited<ReturnType<typeof listEntriesForFarmer>>
+  payments: Awaited<ReturnType<typeof listPaymentsForFarmer>>
+}
+
+function totalsFromRows(
+  entries: FarmerTotals['entries'],
+  payments: FarmerTotals['payments'],
+): FarmerTotals {
   const totalGreenKg = entries.reduce((s, e) => s + e.greenKg, 0)
   const totalDryKg = entries.reduce((s, e) => s + e.dryKg, 0)
   const totalLossKg = entries.reduce((s, e) => s + e.lossKg, 0)
@@ -116,4 +128,42 @@ export async function getFarmerTotals(farmerId: string) {
     entries,
     payments,
   }
+}
+
+export async function getFarmerTotals(farmerId: string): Promise<FarmerTotals> {
+  const [entries, payments] = await Promise.all([
+    listEntriesForFarmer(farmerId),
+    listPaymentsForFarmer(farmerId),
+  ])
+  return totalsFromRows(entries, payments)
+}
+
+/** One IndexedDB pass for all farmers — used by list pages & overview. */
+export async function getAllFarmerTotalsMap(): Promise<Map<string, FarmerTotals>> {
+  const [entries, payments] = await Promise.all([
+    sdb.dailyEntries.toArray(),
+    sdb.payments.toArray(),
+  ])
+  const entriesBy = new Map<string, typeof entries>()
+  const paymentsBy = new Map<string, typeof payments>()
+  for (const e of entries) {
+    const list = entriesBy.get(e.farmerId)
+    if (list) list.push(e)
+    else entriesBy.set(e.farmerId, [e])
+  }
+  for (const p of payments) {
+    const list = paymentsBy.get(p.farmerId)
+    if (list) list.push(p)
+    else paymentsBy.set(p.farmerId, [p])
+  }
+  const map = new Map<string, FarmerTotals>()
+  const ids = new Set([...entriesBy.keys(), ...paymentsBy.keys()])
+  for (const id of ids) {
+    map.set(id, totalsFromRows(entriesBy.get(id) ?? [], paymentsBy.get(id) ?? []))
+  }
+  return map
+}
+
+export function emptyFarmerTotals(): FarmerTotals {
+  return totalsFromRows([], [])
 }
