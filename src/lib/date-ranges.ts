@@ -13,31 +13,12 @@ import {
   subYears,
 } from 'date-fns'
 import { toZonedTime, fromZonedTime } from 'date-fns-tz'
+import type { DatePreset } from './date-presets'
+
+export type { DatePreset } from './date-presets'
+export { DATE_PRESET_LABELS, getYmdRange, kolkataTodayYmd } from './date-presets'
 
 const TZ = 'Asia/Kolkata'
-
-export type DatePreset =
-  | 'today'
-  | 'yesterday'
-  | 'this_week'
-  | 'last_week'
-  | 'this_month'
-  | 'last_month'
-  | 'this_year'
-  | 'last_year'
-  | 'custom'
-
-export const DATE_PRESET_LABELS: Record<DatePreset, string> = {
-  today: 'Today',
-  yesterday: 'Yesterday',
-  this_week: 'This Week',
-  last_week: 'Last Week',
-  this_month: 'This Month',
-  last_month: 'Last Month',
-  this_year: 'This Year',
-  last_year: 'Last Year',
-  custom: 'Custom Range',
-}
 
 function kolkataNow(): Date {
   return toZonedTime(new Date(), TZ)
@@ -50,6 +31,7 @@ function rangeFromLocal(startLocal: Date, endLocal: Date): { from: string; to: s
   }
 }
 
+/** ISO timestamp ranges (heavier). Prefer getYmdRange for entryDate filters. */
 export function getDateRange(
   preset: DatePreset,
   customFrom?: string,

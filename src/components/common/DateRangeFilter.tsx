@@ -1,4 +1,4 @@
-import { DATE_PRESET_LABELS, type DatePreset } from '@/lib/date-ranges'
+import { DATE_PRESET_LABELS, type DatePreset } from '@/lib/date-presets'
 import { Select } from '@/components/ui/select'
 import { Input } from '@/components/ui/input'
 import { FormField } from './FormField'

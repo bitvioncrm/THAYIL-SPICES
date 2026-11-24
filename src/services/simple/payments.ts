@@ -1,4 +1,5 @@
 import { sdb } from '@/db/simple-db'
+import { bumpDataCache } from '@/lib/data-cache'
 import { nowISO, uid } from '@/lib/utils'
 import type { PaymentMethod, SimplePayment } from '@/types/simple'
 import { nextSimpleCode } from './ids'
@@ -49,5 +50,6 @@ export async function recordPayment(params: {
       }
     }
   })
+  bumpDataCache()
   return payment
 }

@@ -5,9 +5,25 @@ import { BrandMark, BRAND_IMAGE } from '@/components/brand/BrandMark'
 import { ThemeToggle } from '@/components/navigation/ThemeToggle'
 
 const links = [
-  { to: '/', label: 'Overview', icon: LayoutDashboard, end: true },
-  { to: '/farmers', label: 'Farmers', icon: Users },
-  { to: '/billing', label: 'Billing', icon: Receipt },
+  {
+    to: '/',
+    label: 'Overview',
+    icon: LayoutDashboard,
+    end: true,
+    warm: () => void import('@/pages/OverviewPage'),
+  },
+  {
+    to: '/farmers',
+    label: 'Farmers',
+    icon: Users,
+    warm: () => void import('@/pages/FarmersPage'),
+  },
+  {
+    to: '/billing',
+    label: 'Billing',
+    icon: Receipt,
+    warm: () => void import('@/pages/BillingPage'),
+  },
 ]
 
 export function Sidebar() {
@@ -40,11 +56,13 @@ export function Sidebar() {
           Menu
         </p>
         <ul className="space-y-1">
-          {links.map(({ to, label, icon: Icon, end }) => (
+          {links.map(({ to, label, icon: Icon, end, warm }) => (
             <li key={to}>
               <NavLink
                 to={to}
                 end={end}
+                onPointerEnter={warm}
+                onFocus={warm}
                 className={({ isActive }) =>
                   cn(
                     'flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium transition-colors',

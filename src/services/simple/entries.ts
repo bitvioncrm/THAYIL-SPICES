@@ -1,4 +1,5 @@
 import { sdb } from '@/db/simple-db'
+import { bumpDataCache } from '@/lib/data-cache'
 import { assertValidWeights, calcLabourCharge, calcLoss } from '@/lib/simple-calc'
 import { nowISO, uid } from '@/lib/utils'
 import type { DailyEntry, PaymentMethod, RateMethod } from '@/types/simple'
@@ -74,6 +75,7 @@ export async function createDailyEntry(data: DailyEntryForm): Promise<DailyEntry
     updatedAt: now,
   }
   await sdb.dailyEntries.add(entry)
+  bumpDataCache()
   return entry
 }
 
@@ -108,6 +110,7 @@ export async function updateDailyEntry(id: string, data: DailyEntryForm): Promis
     updatedAt: nowISO(),
   }
   await sdb.dailyEntries.put(updated)
+  bumpDataCache()
   return updated
 }
 
@@ -116,4 +119,5 @@ export async function deleteDailyEntry(id: string) {
   if (!before) throw new Error('Entry not found')
   if (before.billedBillId) throw new Error('Cannot delete a billed entry. Cancel the bill first.')
   await sdb.dailyEntries.delete(id)
+  bumpDataCache()
 }

@@ -1,4 +1,5 @@
 import { sdb } from '@/db/simple-db'
+import { bumpDataCache, readCached, writeCached } from '@/lib/data-cache'
 import { nowISO, uid } from '@/lib/utils'
 import type { RateMethod, SimpleFarmer } from '@/types/simple'
 import { nextSimpleCode, getSimpleSettings } from './ids'
@@ -67,6 +68,7 @@ export async function createFarmer(data: FarmerFormData): Promise<SimpleFarmer> 
     updatedAt: now,
   }
   await sdb.farmers.add(farmer)
+  bumpDataCache()
   return farmer
 }
 
@@ -92,6 +94,7 @@ export async function updateFarmer(id: string, data: FarmerFormData): Promise<Si
     updatedAt: nowISO(),
   }
   await sdb.farmers.put(updated)
+  bumpDataCache()
   return updated
 }
 
@@ -140,6 +143,9 @@ export async function getFarmerTotals(farmerId: string): Promise<FarmerTotals> {
 
 /** One IndexedDB pass for all farmers — used by list pages & overview. */
 export async function getAllFarmerTotalsMap(): Promise<Map<string, FarmerTotals>> {
+  const cached = readCached<Map<string, FarmerTotals>>('totals', 'all')
+  if (cached) return cached
+
   const [entries, payments] = await Promise.all([
     sdb.dailyEntries.toArray(),
     sdb.payments.toArray(),
@@ -161,6 +167,7 @@ export async function getAllFarmerTotalsMap(): Promise<Map<string, FarmerTotals>
   for (const id of ids) {
     map.set(id, totalsFromRows(entriesBy.get(id) ?? [], paymentsBy.get(id) ?? []))
   }
+  writeCached('totals', 'all', map)
   return map
 }
 

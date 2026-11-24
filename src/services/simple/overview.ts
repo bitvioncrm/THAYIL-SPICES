@@ -1,23 +1,52 @@
 import { sdb } from '@/db/simple-db'
-import { getDateRange, type DatePreset } from '@/lib/date-ranges'
+import { getYmdRange, type DatePreset } from '@/lib/date-presets'
+import { readCached, writeCached } from '@/lib/data-cache'
 import { roundKg, roundMoney } from '@/lib/utils'
-import { getAllFarmerTotalsMap, listFarmers } from './farmers'
-import { listBills } from './billing'
+import { listFarmers } from './farmers'
+import type { DailyEntry, SimpleFarmer, SimplePayment } from '@/types/simple'
 
-/** Convert ISO range to YYYY-MM-DD in local/Kolkata-ish for entryDate compare */
-function toDay(iso: string): string {
-  return new Date(iso).toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' })
+export type OverviewData = Awaited<ReturnType<typeof computeOverview>>
+
+function outstandingFromRows(
+  farmers: SimpleFarmer[],
+  entries: DailyEntry[],
+  payments: SimplePayment[],
+) {
+  const charge = new Map<string, number>()
+  const paid = new Map<string, number>()
+  for (const e of entries) {
+    charge.set(e.farmerId, (charge.get(e.farmerId) ?? 0) + e.labourCharge)
+    paid.set(e.farmerId, (paid.get(e.farmerId) ?? 0) + e.amountPaid)
+  }
+  for (const p of payments) {
+    paid.set(p.farmerId, (paid.get(p.farmerId) ?? 0) + p.amount)
+  }
+
+  let outstanding = 0
+  const pending: { farmerId: string; name: string; code: string; balance: number }[] = []
+  for (const f of farmers) {
+    const bal = roundMoney((charge.get(f.id) ?? 0) - (paid.get(f.id) ?? 0))
+    if (bal > 0.009) {
+      outstanding += bal
+      pending.push({
+        farmerId: f.id,
+        name: f.fullName,
+        code: f.farmerCode,
+        balance: bal,
+      })
+    }
+  }
+  pending.sort((a, b) => b.balance - a.balance)
+  return { outstanding: roundMoney(outstanding), pending }
 }
 
-export async function getOverview(preset: DatePreset, customFrom?: string, customTo?: string) {
-  const range = getDateRange(preset, customFrom, customTo)
-  const fromDay = toDay(range.from)
-  const toDayStr = toDay(range.to)
+async function computeOverview(preset: DatePreset, customFrom?: string, customTo?: string) {
+  const { from: fromDay, to: toDayStr } = getYmdRange(preset, customFrom, customTo)
 
   const [farmers, entries, bills, payments] = await Promise.all([
     listFarmers(),
     sdb.dailyEntries.toArray(),
-    listBills(),
+    sdb.bills.toArray(),
     sdb.payments.toArray(),
   ])
 
@@ -40,26 +69,8 @@ export async function getOverview(preset: DatePreset, customFrom?: string, custo
     paidOnEntries + paymentsInPeriod.reduce((s, p) => s + p.amount, 0),
   )
 
-  const totalsMap = await getAllFarmerTotalsMap()
-  let outstanding = 0
-  const pending: { farmerId: string; name: string; code: string; balance: number }[] = []
-  for (const f of farmers) {
-    const t = totalsMap.get(f.id)
-    const bal = t?.outstanding ?? 0
-    if (bal > 0.009) {
-      outstanding += bal
-      pending.push({
-        farmerId: f.id,
-        name: f.fullName,
-        code: f.farmerCode,
-        balance: bal,
-      })
-    }
-  }
-  outstanding = roundMoney(outstanding)
-  pending.sort((a, b) => b.balance - a.balance)
+  const { outstanding, pending } = outstandingFromRows(farmers, entries, payments)
 
-  // Charts
   const byDay = new Map<string, { green: number; dry: number; loss: number; charge: number }>()
   for (const e of inPeriod) {
     const cur = byDay.get(e.entryDate) ?? { green: 0, dry: 0, loss: 0, charge: 0 }
@@ -96,13 +107,14 @@ export async function getOverview(preset: DatePreset, customFrom?: string, custo
       dry: roundKg(v.dry),
     }))
 
-  const recentEntries = [...entries]
+  const recentEntries = entries
+    .slice()
     .sort((a, b) => b.entryDate.localeCompare(a.entryDate) || b.createdAt.localeCompare(a.createdAt))
     .slice(0, 8)
   const farmerMap = new Map(farmers.map((f) => [f.id, f]))
 
   return {
-    range: { from: range.from, to: range.to, fromDay, toDay: toDayStr, preset },
+    range: { from: fromDay, to: toDayStr, fromDay, toDay: toDayStr, preset },
     kpis: {
       totalFarmers: farmers.length,
       greenKg,
@@ -119,11 +131,28 @@ export async function getOverview(preset: DatePreset, customFrom?: string, custo
       ...e,
       farmer: farmerMap.get(e.farmerId),
     })),
-    recentBills: bills.filter((b) => b.status === 'finalized').slice(0, 6),
+    recentBills: bills
+      .filter((b) => b.status === 'finalized')
+      .sort((a, b) => b.billDate.localeCompare(a.billDate) || b.createdAt.localeCompare(a.createdAt))
+      .slice(0, 6),
     pendingBalances: pending.slice(0, 8),
     periodActivity: inPeriod
+      .slice()
       .sort((a, b) => b.entryDate.localeCompare(a.entryDate))
       .slice(0, 10)
       .map((e) => ({ ...e, farmer: farmerMap.get(e.farmerId) })),
   }
+}
+
+export async function getOverview(
+  preset: DatePreset,
+  customFrom?: string,
+  customTo?: string,
+) {
+  const key = `${preset}|${customFrom ?? ''}|${customTo ?? ''}`
+  const hit = readCached<OverviewData>('overview', key)
+  if (hit) return hit
+  const data = await computeOverview(preset, customFrom, customTo)
+  writeCached('overview', key, data)
+  return data
 }

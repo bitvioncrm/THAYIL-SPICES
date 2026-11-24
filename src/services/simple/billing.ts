@@ -1,4 +1,5 @@
 import { sdb } from '@/db/simple-db'
+import { bumpDataCache } from '@/lib/data-cache'
 import { roundKg, roundMoney, nowISO, uid } from '@/lib/utils'
 import type { Bill, BillPeriodType, DailyEntry } from '@/types/simple'
 import { listEntriesInRange } from './entries'
@@ -164,6 +165,8 @@ export async function finalizeBill(params: {
       linkedBillId: bill.id,
       notes: `Payment on ${billCode}`,
     })
+  } else {
+    bumpDataCache()
   }
 
   return (await sdb.bills.get(bill.id))!
@@ -187,6 +190,7 @@ export async function cancelBill(id: string): Promise<Bill> {
       }
     }
   })
+  bumpDataCache()
   return (await sdb.bills.get(id))!
 }
 
